@@ -2,9 +2,9 @@ type RetainOperation = number;
 type InsertOperation = string;
 type DeleteOperation = number;
 
-type Operation = RetainOperation | InsertOperation | DeleteOperation;
+export type Operation = RetainOperation | InsertOperation | DeleteOperation;
 
-const CHANGE_LINE_CHAR = '\n';
+export const CHANGE_LINE_CHAR = '\n';
 
 class LineOT {
   ops: Operation[] = [];
@@ -69,7 +69,7 @@ class LineOT {
       // 如果前一个是DeleteOperation
       // delete(2),insert('a') => delete(1)
       // delete(1),insert('a') => noop
-      const deleteLineCounts = (beforeOp as number) - 1;
+      const deleteLineCounts = (beforeOp as number) + 1;
       if (deleteLineCounts === 0) {
         ops.pop();
       } else {
