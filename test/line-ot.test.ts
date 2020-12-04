@@ -268,3 +268,143 @@ describe('delete', () => {
     expect(ot.toJSON().length === 0).toBeTruthy();
   });
 });
+
+describe('compose', () => {
+  it('success insert', () => {
+    const ot1 = new LineOT();
+    ot1.insert('d').retain(3);
+    const ot2 = new LineOT();
+    ot2.retain(4).insert('f');
+    const ot = ot1.compose(ot2);
+    const result = ot.apply(file);
+    const lines = ([] as string[]).concat(fileLines);
+    lines.unshift('d');
+    lines.push('f');
+    expect(ot.toJSON().length === 3).toBeTruthy();
+    expect(lines.join(CHANGE_LINE_CHAR) === result).toBeTruthy();
+  });
+
+  it('success delete', () => {
+    const ot1 = new LineOT();
+    ot1.delete(1).retain(2);
+    const ot2 = new LineOT();
+    ot2.retain(1).delete(1);
+    const ot = ot1.compose(ot2);
+    const result = ot.apply(file);
+    const lines = ([] as string[]).concat(fileLines);
+    lines.shift();
+    lines.pop();
+    expect(ot.toJSON().length === 3).toBeTruthy();
+    expect(lines.join(CHANGE_LINE_CHAR) === result).toBeTruthy();
+  });
+
+  it('success retain1 > retain2', () => {
+    const ot1 = new LineOT();
+    ot1.retain(2).delete(1);
+    const ot2 = new LineOT();
+    ot2
+      .retain(1)
+      .insert('d')
+      .retain(1);
+    const ot = ot1.compose(ot2);
+    const result = ot.apply(file);
+    const lines = ([] as string[]).concat(fileLines);
+    lines.pop();
+    lines.splice(1, 0, 'd');
+    expect(ot.toJSON().length === 4).toBeTruthy();
+    expect(lines.join(CHANGE_LINE_CHAR) === result).toBeTruthy();
+  });
+
+  it('success retain1 < retain2', () => {
+    const ot1 = new LineOT();
+    ot1
+      .retain(1)
+      .insert('d')
+      .retain(1)
+      .delete(1);
+    const ot2 = new LineOT();
+    ot2
+      .retain(2)
+      .insert('d')
+      .retain(1);
+    const ot = ot1.compose(ot2);
+    expect(ot.toJSON().length === 5).toBeTruthy();
+    expect(ot.toString() === [1, 'd', 'd', 1, -1].toString()).toBeTruthy();
+  });
+
+  it('merge insert and delete case delete counts === insert counts', () => {
+    const ot1 = new LineOT();
+    ot1.insert('d');
+    const ot2 = new LineOT();
+    ot2.delete(1);
+    const ot = ot1.compose(ot2);
+    expect(ot.toJSON().length === 0).toBeTruthy();
+  });
+
+  it('merge insert and delete case delete counts > insert counts', () => {
+    const ot1 = new LineOT();
+    ot1.insert('d').retain(1);
+    const ot2 = new LineOT();
+    ot2.delete(2);
+    const ot = ot1.compose(ot2);
+    expect(ot.toJSON().length === 1).toBeTruthy();
+  });
+
+  it('merge delete and insert case delete counts === insert counts', () => {
+    const ot1 = new LineOT();
+    ot1.delete(1);
+    const ot2 = new LineOT();
+    ot2.insert('d');
+    const ot = ot1.compose(ot2);
+    expect(ot.toJSON().length === 0).toBeTruthy();
+  });
+
+  it('merge delete and insert case delete counts > insert counts', () => {
+    const ot1 = new LineOT();
+    ot1.delete(2);
+    const ot2 = new LineOT();
+    ot2.insert('d');
+    const ot = ot1.compose(ot2);
+    expect(ot.toJSON().length === 1).toBeTruthy();
+  });
+
+  it('merge retain counts > delete counts', () => {
+    const ot1 = new LineOT();
+    ot1
+      .retain(2)
+      .insert('d')
+      .retain(1);
+    const ot2 = new LineOT();
+    ot2.delete(1).retain(3);
+    const ot = ot1.compose(ot2);
+    expect(ot.toJSON().length === 4).toBeTruthy();
+    expect(ot.toString() === [-1, 1, 'd', 1].toString()).toBeTruthy();
+  });
+
+  it('merge retain counts < delete counts', () => {
+    const ot1 = new LineOT();
+    ot1
+      .retain(1)
+      .insert('d')
+      .retain(2);
+    const ot2 = new LineOT();
+    ot2.delete(2).retain(2);
+    const ot = ot1.compose(ot2);
+    expect(ot.toJSON().length === 2).toBeTruthy();
+    expect(ot.toString() === [-1, 2].toString()).toBeTruthy();
+  });
+
+  it('base line counts error', () => {
+    const ot1 = new LineOT();
+    ot1.insert('d').retain(3);
+    const ot2 = new LineOT();
+    ot2.retain(3).insert('f');
+    let error = '';
+    try {
+      ot1.compose(ot2);
+    } catch (e) {
+      error = e;
+    }
+    expect(error !== '').toBeTruthy();
+  });
+});

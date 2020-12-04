@@ -158,6 +158,235 @@ class LineOT {
 
     return resultFile.join(CHANGE_LINE_CHAR);
   };
+
+  // Compose merges two consecutive operations into one operation, that
+  // preserves the changes of both. Or, in other words, for each input string S
+  // and a pair of consecutive operations A and B,
+  // apply(apply(S, A), B) = apply(S, compose(A, B)) must hold.
+  compose = (operation2: LineOT) => {
+    const operation1 = this;
+    if (operation1.targetLineCounts !== operation2.baseLineCounts) {
+      throw new Error(
+        'The base line counts of the second operation has to be the target line counts of the first operation',
+      );
+    }
+
+    const { isInsert, isRetain, isDelete } = operation1;
+    const operation = new LineOT(); // the combined operation
+    const ops1 = operation1.ops;
+    const ops2 = operation2.ops; // for fast access
+    let i1 = 0;
+    let i2 = 0; // current index into ops1 respectively ops2
+    let op1 = ops1[i1++];
+    let op2 = ops2[i2++]; // current ops
+    while (true) {
+      // Dispatch on the type of op1 and op2
+      // tslint:disable-next-line: strict-type-predicates
+      if (typeof op1 === 'undefined' && typeof op2 === 'undefined') {
+        // end condition: both ops1 and ops2 have been processed
+        break;
+      }
+
+      if (isDelete(op1)) {
+        operation['delete'](op1 as DeleteOperation);
+        op1 = ops1[i1++];
+        continue;
+      }
+      if (isInsert(op2)) {
+        operation.insert(op2 as InsertOperation);
+        op2 = ops2[i2++];
+        continue;
+      }
+
+      // tslint:disable-next-line: strict-type-predicates
+      if (typeof op1 === 'undefined') {
+        throw new Error('Cannot compose operations: first operation is too short.');
+      }
+      // tslint:disable-next-line: strict-type-predicates
+      if (typeof op2 === 'undefined') {
+        throw new Error('Cannot compose operations: first operation is too long.');
+      }
+
+      if (isRetain(op1) && isRetain(op2)) {
+        if (op1 > op2) {
+          operation.retain(op2 as RetainOperation);
+          op1 = (op1 as RetainOperation) - (op2 as RetainOperation);
+          op2 = ops2[i2++];
+        } else if (op1 === op2) {
+          operation.retain(op1 as RetainOperation);
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          operation.retain(op1 as RetainOperation);
+          op2 = (op2 as RetainOperation) - (op1 as RetainOperation);
+          op1 = ops1[i1++];
+        }
+      } else if (isInsert(op1) && isDelete(op2)) {
+        if (-op2 === 1) {
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          op2 = (op2 as DeleteOperation) + 1;
+          op1 = ops1[i1++];
+        }
+      } else if (isInsert(op1) && isRetain(op2)) {
+        if (op2 === 1) {
+          operation.insert(op1 as InsertOperation);
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          operation.insert(op1 as InsertOperation);
+          op2 = (op2 as RetainOperation) - 1;
+          op1 = ops1[i1++];
+        }
+      } else if (isRetain(op1) && isDelete(op2)) {
+        if (op1 > -op2) {
+          operation['delete'](op2 as DeleteOperation);
+          op1 = (op1 as RetainOperation) + (op2 as DeleteOperation);
+          op2 = ops2[i2++];
+        } else if (op1 === -op2) {
+          operation['delete'](op2 as DeleteOperation);
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          operation['delete'](op1 as DeleteOperation);
+          op2 = (op2 as DeleteOperation) + (op1 as RetainOperation);
+          op1 = ops1[i1++];
+        }
+      } else {
+        throw new Error(
+          "This shouldn't happen: op1: " + JSON.stringify(op1) + ', op2: ' + JSON.stringify(op2),
+        );
+      }
+    }
+    return operation;
+  };
+
+  // Transform takes two operations A and B that happened concurrently and
+  // produces two operations A' and B' (in an array) such that
+  // `apply(apply(S, A), B') = apply(apply(S, B), A')`. This function is the
+  // heart of OT.
+  static transform = (operation1: LineOT, operation2: LineOT) => {
+    if (operation1.baseLineCounts !== operation2.baseLineCounts) {
+      throw new Error('Both operations have to have the same line counts');
+    }
+
+    const { isInsert, isRetain, isDelete } = operation1;
+
+    const operation1prime = new LineOT();
+    const operation2prime = new LineOT();
+    const ops1 = operation1.ops;
+    const ops2 = operation2.ops;
+    let i1 = 0;
+    let i2 = 0;
+    let op1 = ops1[i1++];
+    let op2 = ops2[i2++];
+    while (true) {
+      // At every iteration of the loop, the imaginary cursor that both
+      // operation1 and operation2 have that operates on the input string must
+      // have the same position in the input string.
+
+      // tslint:disable-next-line: strict-type-predicates
+      if (typeof op1 === 'undefined' && typeof op2 === 'undefined') {
+        // end condition: both ops1 and ops2 have been processed
+        break;
+      }
+
+      // next two cases: one or both ops are insert ops
+      // => insert the string in the corresponding prime operation, skip it in
+      // the other one. If both op1 and op2 are insert ops, prefer op1.
+      if (isInsert(op1)) {
+        operation1prime.insert(op1 as InsertOperation);
+        operation2prime.retain(1);
+        op1 = ops1[i1++];
+        continue;
+      }
+      if (isInsert(op2)) {
+        operation1prime.retain(1);
+        operation2prime.insert(op2 as InsertOperation);
+        op2 = ops2[i2++];
+        continue;
+      }
+
+      // tslint:disable-next-line: strict-type-predicates
+      if (typeof op1 === 'undefined') {
+        throw new Error('Cannot compose operations: first operation is too short.');
+      }
+      // tslint:disable-next-line: strict-type-predicates
+      if (typeof op2 === 'undefined') {
+        throw new Error('Cannot compose operations: first operation is too long.');
+      }
+
+      let minL;
+      if (isRetain(op1) && isRetain(op2)) {
+        // Simple case: retain/retain
+        if (op1 > op2) {
+          minL = op2;
+          op1 = (op1 as RetainOperation) - (op2 as RetainOperation);
+          op2 = ops2[i2++];
+        } else if (op1 === op2) {
+          minL = op2;
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          minL = op1;
+          op2 = (op2 as RetainOperation) - (op1 as RetainOperation);
+          op1 = ops1[i1++];
+        }
+        operation1prime.retain(minL as RetainOperation);
+        operation2prime.retain(minL as RetainOperation);
+      } else if (isDelete(op1) && isDelete(op2)) {
+        // Both operations delete the same string at the same position. We don't
+        // need to produce any operations, we just skip over the delete ops and
+        // handle the case that one operation deletes more than the other.
+        if (-op1 > -op2) {
+          op1 = (op1 as DeleteOperation) - (op2 as DeleteOperation);
+          op2 = ops2[i2++];
+        } else if (op1 === op2) {
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          op2 = (op2 as DeleteOperation) - (op1 as DeleteOperation);
+          op1 = ops1[i1++];
+        }
+        // next two cases: delete/retain and retain/delete
+      } else if (isDelete(op1) && isRetain(op2)) {
+        if (-op1 > op2) {
+          minL = op2;
+          op1 = (op1 as DeleteOperation) + (op2 as RetainOperation);
+          op2 = ops2[i2++];
+        } else if (-op1 === op2) {
+          minL = op2;
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          minL = -op1;
+          op2 = (op2 as RetainOperation) + (op1 as DeleteOperation);
+          op1 = ops1[i1++];
+        }
+        operation1prime['delete'](minL as DeleteOperation);
+      } else if (isRetain(op1) && isDelete(op2)) {
+        if (op1 > -op2) {
+          minL = -op2;
+          op1 = (op1 as RetainOperation) + (op2 as DeleteOperation);
+          op2 = ops2[i2++];
+        } else if (op1 === -op2) {
+          minL = op1;
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          minL = op1;
+          op2 = (op2 as DeleteOperation) + (op1 as RetainOperation);
+          op1 = ops1[i1++];
+        }
+        operation2prime['delete'](minL as DeleteOperation);
+      } else {
+        throw new Error("The two operations aren't compatible");
+      }
+    }
+
+    return [operation1prime, operation2prime];
+  };
 }
 
 export default LineOT;
