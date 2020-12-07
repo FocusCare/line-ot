@@ -15,7 +15,7 @@ describe('constructor', () => {
   });
 
   it('fromJSON', () => {
-    const ot = new LineOT([1, 'd', -1, 1]);
+    const ot = new LineOT([1, ['d'], -1, 1]);
     const result = ot.apply(file);
     const lines = ([] as string[]).concat(fileLines);
     lines.splice(1, 1, 'd');
@@ -85,7 +85,7 @@ describe('retain', () => {
       result = '';
     }
     expect(result === file).toBeTruthy();
-    expect(ot.toString() === fileLineCounts.toString()).toBeTruthy();
+    expect(ot.toJSON()[0] === fileLineCounts).toBeTruthy();
   });
 
   it('out of line counts', () => {
@@ -117,7 +117,7 @@ describe('retain', () => {
     }
     expect(result === '').toBeTruthy();
     expect(error !== '').toBeTruthy();
-    expect(ot.toString() === '4').toBeTruthy();
+    expect(ot.toJSON()[0] === 4).toBeTruthy();
   });
 
   it('less then line counts', () => {
@@ -152,7 +152,7 @@ describe('insert', () => {
     const ot = new LineOT();
     const newLine = 'd';
     const result = ot
-      .insert(newLine)
+      .insert([newLine])
       .retain(3)
       .apply(file);
     const lines = result.split(CHANGE_LINE_CHAR);
@@ -166,7 +166,7 @@ describe('insert', () => {
     const newLine = 'd';
     const result = ot
       .retain(insertIndex)
-      .insert(newLine)
+      .insert([newLine])
       .retain(fileLineCounts - insertIndex)
       .apply(file);
     const lines = ([] as string[]).concat(fileLines);
@@ -176,22 +176,35 @@ describe('insert', () => {
 
   it('empty', () => {
     const ot = new LineOT();
-    ot.insert('');
+    ot.insert([]);
     expect(ot.toJSON().length === 0).toBeTruthy();
     expect(ot.isNoop()).toBeTruthy();
   });
 
-  it('merge delete comes noop', () => {
+  it('merge insert', () => {
     const ot = new LineOT();
-    ot.delete(1).insert('d');
-    expect(ot.toJSON().length === 0).toBeTruthy();
+    ot.insert(['d']).insert(['d']);
+    expect(ot.isInsert(ot.toJSON()[0])).toBeTruthy();
+    expect(ot.toJSON().length === 1).toBeTruthy();
   });
 
-  it('merge delete', () => {
+  it('merge delete1', () => {
     const ot = new LineOT();
-    ot.delete(2).insert('d');
-    expect(ot.toJSON().length === 1).toBeTruthy();
-    expect(ot.toJSON().toString() === '-1').toBeTruthy();
+    ot.retain(1)
+      .delete(1)
+      .insert(['d']);
+    expect(ot.isInsert(ot.toJSON()[1])).toBeTruthy();
+    expect(ot.isDelete(ot.toJSON()[2])).toBeTruthy();
+  });
+
+  it('merge delete2', () => {
+    const ot = new LineOT();
+    ot.insert(['f'])
+      .delete(2)
+      .insert(['d']);
+    expect(ot.toJSON().length === 2).toBeTruthy();
+    expect(ot.isInsert(ot.toJSON()[0])).toBeTruthy();
+    expect(ot.isDelete(ot.toJSON()[1])).toBeTruthy();
   });
 
   it('params error', () => {
@@ -200,6 +213,18 @@ describe('insert', () => {
     try {
       // @ts-ignore
       ot.insert(1);
+    } catch (e) {
+      error = e;
+    }
+    expect(error !== '').toBeTruthy();
+  });
+
+  it('params error2', () => {
+    const ot = new LineOT();
+    let error = '';
+    try {
+      // @ts-ignore
+      ot.insert([1]);
     } catch (e) {
       error = e;
     }
@@ -272,9 +297,9 @@ describe('delete', () => {
 describe('compose', () => {
   it('success insert', () => {
     const ot1 = new LineOT();
-    ot1.insert('d').retain(3);
+    ot1.insert(['d']).retain(3);
     const ot2 = new LineOT();
-    ot2.retain(4).insert('f');
+    ot2.retain(4).insert(['f']);
     const ot = ot1.compose(ot2);
     const result = ot.apply(file);
     const lines = ([] as string[]).concat(fileLines);
@@ -304,7 +329,7 @@ describe('compose', () => {
     const ot2 = new LineOT();
     ot2
       .retain(1)
-      .insert('d')
+      .insert(['d'])
       .retain(1);
     const ot = ot1.compose(ot2);
     const result = ot.apply(file);
@@ -319,86 +344,104 @@ describe('compose', () => {
     const ot1 = new LineOT();
     ot1
       .retain(1)
-      .insert('d')
+      .insert(['d'])
       .retain(1)
       .delete(1);
     const ot2 = new LineOT();
     ot2
       .retain(2)
-      .insert('d')
+      .insert(['d'])
       .retain(1);
     const ot = ot1.compose(ot2);
-    expect(ot.toJSON().length === 5).toBeTruthy();
-    expect(ot.toString() === [1, 'd', 'd', 1, -1].toString()).toBeTruthy();
+    expect(ot.toJSON().length === 4).toBeTruthy();
+    expect(ot.toString() === JSON.stringify([1, ['d', 'd'], 1, -1])).toBeTruthy();
   });
 
   it('merge insert and delete case delete counts === insert counts', () => {
     const ot1 = new LineOT();
-    ot1.insert('d');
+    ot1.insert(['d']);
     const ot2 = new LineOT();
     ot2.delete(1);
     const ot = ot1.compose(ot2);
     expect(ot.toJSON().length === 0).toBeTruthy();
   });
 
-  it('merge insert and delete case delete counts > insert counts', () => {
+  it('merge insert and delete case delete counts < insert counts', () => {
     const ot1 = new LineOT();
-    ot1.insert('d').retain(1);
+    ot1.insert(['d', 'f', 'g']);
+    const ot2 = new LineOT();
+    ot2.delete(2).retain(1);
+    const ot = ot1.compose(ot2);
+    expect(ot.toJSON().length === 1).toBeTruthy();
+    expect(ot.isInsert(ot.toJSON()[0])).toBeTruthy();
+  });
+
+  it('merge insert and delete case delete counts < insert counts', () => {
+    const ot1 = new LineOT();
+    ot1.insert(['d']).retain(1);
     const ot2 = new LineOT();
     ot2.delete(2);
     const ot = ot1.compose(ot2);
     expect(ot.toJSON().length === 1).toBeTruthy();
+    expect(ot.isDelete(ot.toJSON()[0])).toBeTruthy();
   });
 
-  it('merge delete and insert case delete counts === insert counts', () => {
+  it('merge delete and insert change index', () => {
     const ot1 = new LineOT();
     ot1.delete(1);
     const ot2 = new LineOT();
-    ot2.insert('d');
+    ot2.insert(['d']);
     const ot = ot1.compose(ot2);
-    expect(ot.toJSON().length === 0).toBeTruthy();
-  });
-
-  it('merge delete and insert case delete counts > insert counts', () => {
-    const ot1 = new LineOT();
-    ot1.delete(2);
-    const ot2 = new LineOT();
-    ot2.insert('d');
-    const ot = ot1.compose(ot2);
-    expect(ot.toJSON().length === 1).toBeTruthy();
+    expect(ot.isInsert(ot.toJSON()[0])).toBeTruthy();
+    expect(ot.isDelete(ot.toJSON()[1])).toBeTruthy();
+    expect(ot.toJSON().length === 2).toBeTruthy();
   });
 
   it('merge retain counts > delete counts', () => {
     const ot1 = new LineOT();
     ot1
       .retain(2)
-      .insert('d')
+      .insert(['d'])
       .retain(1);
     const ot2 = new LineOT();
     ot2.delete(1).retain(3);
     const ot = ot1.compose(ot2);
     expect(ot.toJSON().length === 4).toBeTruthy();
-    expect(ot.toString() === [-1, 1, 'd', 1].toString()).toBeTruthy();
+    expect(ot.toString() === JSON.stringify([-1, 1, ['d'], 1])).toBeTruthy();
   });
 
   it('merge retain counts < delete counts', () => {
     const ot1 = new LineOT();
     ot1
       .retain(1)
-      .insert('d')
+      .insert(['d'])
       .retain(2);
     const ot2 = new LineOT();
     ot2.delete(2).retain(2);
     const ot = ot1.compose(ot2);
     expect(ot.toJSON().length === 2).toBeTruthy();
-    expect(ot.toString() === [-1, 2].toString()).toBeTruthy();
+    expect(ot.toString() === JSON.stringify([-1, 2])).toBeTruthy();
+  });
+
+  it('merge insert and retain', () => {
+    const ot1 = new LineOT();
+    ot1.insert(['d', 'e', 'f']);
+    const ot2 = new LineOT();
+    ot2
+      .retain(1)
+      .insert(['g'])
+      .retain(2);
+    const ot = ot1.compose(ot2);
+    console.log(ot.toJSON());
+    expect(ot.toJSON().length === 1).toBeTruthy();
+    expect(ot.isInsert(ot.toJSON()[0])).toBeTruthy();
   });
 
   it('base line counts error', () => {
     const ot1 = new LineOT();
-    ot1.insert('d').retain(3);
+    ot1.insert(['d']).retain(3);
     const ot2 = new LineOT();
-    ot2.retain(3).insert('f');
+    ot2.retain(3).insert(['f']);
     let error = '';
     try {
       ot1.compose(ot2);

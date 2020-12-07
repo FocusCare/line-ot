@@ -1,5 +1,5 @@
 type RetainOperation = number;
-type InsertOperation = string;
+type InsertOperation = string[];
 type DeleteOperation = number;
 
 export type Operation = RetainOperation | InsertOperation | DeleteOperation;
@@ -24,7 +24,8 @@ class LineOT {
   };
 
   isInsert = (op: Operation) => {
-    return typeof op === 'string';
+    // tslint:disable-next-line: strict-type-predicates
+    return op instanceof Array && op.every(o => typeof o === 'string');
   };
 
   isDelete = (op: Operation) => {
@@ -53,30 +54,37 @@ class LineOT {
     return this;
   };
 
-  insert = (str: InsertOperation) => {
-    // tslint:disable-next-line: strict-type-predicates
-    if (typeof str !== 'string') {
-      throw new Error('insert expects a string');
+  insert = (strList: InsertOperation) => {
+    if (!(strList instanceof Array)) {
+      throw new Error('insert expects an array');
     }
-    if (str === '') {
+    if (strList.length === 0) {
       return this;
     }
-    this.targetLineCounts++;
+    // tslint:disable-next-line: strict-type-predicates
+    if (!strList.every(s => typeof s === 'string')) {
+      throw new Error('insert item expects string');
+    }
+    this.targetLineCounts += strList.length;
     const ops = this.ops;
     const beforeOp = ops[ops.length - 1];
-    if (this.isDelete(beforeOp)) {
-      // 操作符合并逻辑
-      // 如果前一个是DeleteOperation
-      // delete(2),insert('a') => delete(1)
-      // delete(1),insert('a') => noop
-      const deleteLineCounts = (beforeOp as number) + 1;
-      if (deleteLineCounts === 0) {
-        ops.pop();
+    if (this.isInsert(beforeOp)) {
+      // Merge insert op.
+      ops[ops.length - 1] = (beforeOp as InsertOperation).concat(strList);
+    } else if (this.isDelete(beforeOp)) {
+      // It doesn't matter when an operation is applied whether the operation
+      // is delete(3), insert("something") or insert("something"), delete(3).
+      // Here we enforce that in this case, the insert op always comes first.
+      // This makes all operations that have the same effect when applied to
+      // a document of the right length equal in respect to the `equals` method.
+      if (this.isInsert(ops[ops.length - 2])) {
+        ops[ops.length - 2] = (ops[ops.length - 2] as InsertOperation).concat(strList);
       } else {
-        ops[ops.length - 1] = deleteLineCounts;
+        ops[ops.length] = ops[ops.length - 1];
+        ops[ops.length - 2] = strList;
       }
     } else {
-      ops.push(str);
+      ops.push(strList);
     }
     return this;
   };
@@ -114,7 +122,7 @@ class LineOT {
   };
 
   toString = () => {
-    return this.toJSON().toString();
+    return JSON.stringify(this.toJSON());
   };
 
   fromJSON = (ops: Operation[]) => {
@@ -142,17 +150,17 @@ class LineOT {
     let indexOfLines = 0;
     this.ops.forEach(op => {
       if (this.isRetain(op)) {
-        if (indexOfLines + (op as number) > lines.length) {
+        if (indexOfLines + (op as RetainOperation) > lines.length) {
           throw new Error("Operation can't retain more line counts than are left in the file.");
         }
-        const endIndex = indexOfLines + (op as number);
+        const endIndex = indexOfLines + (op as RetainOperation);
         resultFile = resultFile.concat(lines.slice(indexOfLines, endIndex));
         indexOfLines = endIndex;
       } else if (this.isInsert(op)) {
-        resultFile.push(op as string);
+        resultFile = resultFile.concat(op as InsertOperation);
       } else {
         // delete op
-        indexOfLines -= op as number;
+        indexOfLines -= op as DeleteOperation;
       }
     });
 
@@ -222,21 +230,28 @@ class LineOT {
           op1 = ops1[i1++];
         }
       } else if (isInsert(op1) && isDelete(op2)) {
-        if (-op2 === 1) {
+        if ((op1 as InsertOperation).length > -op2) {
+          op1 = (op1 as InsertOperation).slice(-op2);
+          op2 = ops2[i2++];
+        } else if ((op1 as InsertOperation).length === -op2) {
           op1 = ops1[i1++];
           op2 = ops2[i2++];
         } else {
-          op2 = (op2 as DeleteOperation) + 1;
+          op2 = (op2 as DeleteOperation) + (op1 as InsertOperation).length;
           op1 = ops1[i1++];
         }
       } else if (isInsert(op1) && isRetain(op2)) {
-        if (op2 === 1) {
+        if ((op1 as InsertOperation).length > op2) {
+          operation.insert((op1 as InsertOperation).slice(0, op2 as RetainOperation));
+          op1 = (op1 as InsertOperation).slice(op2 as RetainOperation);
+          op2 = ops2[i2++];
+        } else if ((op1 as InsertOperation).length === op2) {
           operation.insert(op1 as InsertOperation);
           op1 = ops1[i1++];
           op2 = ops2[i2++];
         } else {
           operation.insert(op1 as InsertOperation);
-          op2 = (op2 as RetainOperation) - 1;
+          op2 = (op2 as RetainOperation) - (op1 as InsertOperation).length;
           op1 = ops1[i1++];
         }
       } else if (isRetain(op1) && isDelete(op2)) {
@@ -297,12 +312,12 @@ class LineOT {
       // the other one. If both op1 and op2 are insert ops, prefer op1.
       if (isInsert(op1)) {
         operation1prime.insert(op1 as InsertOperation);
-        operation2prime.retain(1);
+        operation2prime.retain((op1 as InsertOperation).length);
         op1 = ops1[i1++];
         continue;
       }
       if (isInsert(op2)) {
-        operation1prime.retain(1);
+        operation1prime.retain((op2 as InsertOperation).length);
         operation2prime.insert(op2 as InsertOperation);
         op2 = ops2[i2++];
         continue;
