@@ -1,6 +1,6 @@
 {
-  "name": "line-ot",
-  "version": "0.0.0",
+  "name": "@youzan/line-ot",
+  "version": "1.0.0",
   "description": "",
   "keywords": [],
   "main": "dist/line-ot.umd.js",
