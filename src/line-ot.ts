@@ -140,7 +140,7 @@ class LineOT {
   };
 
   apply = (file: string) => {
-    const lines = file.split(CHANGE_LINE_CHAR);
+    const lines = file ? file.split(CHANGE_LINE_CHAR) : [];
 
     if (lines.length !== this.baseLineCounts) {
       throw new Error("The operation's base line counts must be equal to the file's line counts.");

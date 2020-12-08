@@ -432,7 +432,6 @@ describe('compose', () => {
       .insert(['g'])
       .retain(2);
     const ot = ot1.compose(ot2);
-    console.log(ot.toJSON());
     expect(ot.toJSON().length === 1).toBeTruthy();
     expect(ot.isInsert(ot.toJSON()[0])).toBeTruthy();
   });
@@ -449,5 +448,159 @@ describe('compose', () => {
       error = e;
     }
     expect(error !== '').toBeTruthy();
+  });
+});
+
+describe('transform', () => {
+  it('insert', () => {
+    const ot1 = new LineOT();
+    ot1.insert(['a', 'b']);
+    const ot2 = new LineOT();
+    ot2.insert(['c']);
+    const [transform1, transform2] = LineOT.transform(ot1, ot2);
+
+    const file = '';
+    const file1 = transform2.apply(ot1.apply(file));
+    const file2 = transform1.apply(ot2.apply(file));
+
+    expect(file1 === file2).toBeTruthy();
+  });
+
+  it('retain1 < retain2', () => {
+    const ot1 = new LineOT();
+    ot1
+      .retain(1)
+      .insert(['a', 'b'])
+      .retain(1);
+    const ot2 = new LineOT();
+    ot2.retain(2).insert(['c']);
+    const [transform1, transform2] = LineOT.transform(ot1, ot2);
+    const file = `e
+      f`;
+    const file1 = transform2.apply(ot1.apply(file));
+    const file2 = transform1.apply(ot2.apply(file));
+
+    expect(file1 === file2).toBeTruthy();
+  });
+  it('retain1 > retain2', () => {
+    const ot1 = new LineOT();
+    ot1.retain(2).insert(['c']);
+    const ot2 = new LineOT();
+    ot2
+      .retain(1)
+      .insert(['a', 'b'])
+      .retain(1);
+    const [transform1, transform2] = LineOT.transform(ot1, ot2);
+    const file = `e
+      f`;
+    const file1 = transform2.apply(ot1.apply(file));
+    const file2 = transform1.apply(ot2.apply(file));
+
+    expect(file1 === file2).toBeTruthy();
+  });
+
+  it('delete1 > delete2', () => {
+    const ot1 = new LineOT();
+    ot1.delete(2);
+    const ot2 = new LineOT();
+    ot2.delete(1).retain(1);
+    const [transform1, transform2] = LineOT.transform(ot1, ot2);
+    const file = `e
+      f`;
+    const file1 = transform2.apply(ot1.apply(file));
+    const file2 = transform1.apply(ot2.apply(file));
+
+    expect(file1 === file2).toBeTruthy();
+  });
+
+  it('delete1 === delete2', () => {
+    const ot1 = new LineOT();
+    ot1.delete(2);
+    const ot2 = new LineOT();
+    ot2.delete(2);
+    const [transform1, transform2] = LineOT.transform(ot1, ot2);
+    const file = `e
+      f`;
+    const file1 = transform2.apply(ot1.apply(file));
+    const file2 = transform1.apply(ot2.apply(file));
+
+    expect(file1 === file2).toBeTruthy();
+  });
+
+  it('delete1 < delete2', () => {
+    const ot1 = new LineOT();
+    ot1.delete(1).retain(1);
+    const ot2 = new LineOT();
+    ot2.delete(2);
+    const [transform1, transform2] = LineOT.transform(ot1, ot2);
+    const file = `e
+      f`;
+    const file1 = transform2.apply(ot1.apply(file));
+    const file2 = transform1.apply(ot2.apply(file));
+
+    expect(file1 === file2).toBeTruthy();
+  });
+
+  it('delete1 > retain2', () => {
+    const ot1 = new LineOT();
+    ot1.delete(2).retain(1);
+    const ot2 = new LineOT();
+    ot2
+      .retain(1)
+      .delete(1)
+      .retain(1);
+    const [transform1, transform2] = LineOT.transform(ot1, ot2);
+    const file = `e
+      f
+      g`;
+    const file1 = transform2.apply(ot1.apply(file));
+    const file2 = transform1.apply(ot2.apply(file));
+
+    expect(file1 === file2).toBeTruthy();
+  });
+
+  it('delete1 < retain2', () => {
+    const ot1 = new LineOT();
+    ot1.delete(1).retain(2);
+    const ot2 = new LineOT();
+    ot2.retain(2).delete(1);
+    const [transform1, transform2] = LineOT.transform(ot1, ot2);
+    const file = `e
+      f
+      g`;
+    const file1 = transform2.apply(ot1.apply(file));
+    const file2 = transform1.apply(ot2.apply(file));
+
+    expect(file1 === file2).toBeTruthy();
+  });
+
+  it('retain1 > delete2', () => {
+    const ot1 = new LineOT();
+    ot1.retain(2).delete(1);
+    const ot2 = new LineOT();
+    ot2.delete(1).retain(2);
+    const [transform1, transform2] = LineOT.transform(ot1, ot2);
+    const file = `e
+      f
+      g`;
+    const file1 = transform2.apply(ot1.apply(file));
+    const file2 = transform1.apply(ot2.apply(file));
+
+    expect(file1 === file2).toBeTruthy();
+  });
+
+  it('retain1 < delete2', () => {
+    const ot1 = new LineOT();
+    ot1.retain(1).delete(2);
+    const ot2 = new LineOT();
+    ot2.delete(2).retain(1);
+    const [transform1, transform2] = LineOT.transform(ot1, ot2);
+    const file = `e
+      f
+      g`;
+    const file1 = transform2.apply(ot1.apply(file));
+    const file2 = transform1.apply(ot2.apply(file));
+
+    expect(file1 === file2).toBeTruthy();
   });
 });
