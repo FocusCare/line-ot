@@ -1,6 +1,6 @@
-type RetainOperation = number;
-type InsertOperation = string[];
-type DeleteOperation = number;
+export type RetainOperation = number;
+export type InsertOperation = string[];
+export type DeleteOperation = number;
 
 export type Operation = RetainOperation | InsertOperation | DeleteOperation;
 
