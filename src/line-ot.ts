@@ -6,7 +6,7 @@ export type Operation = RetainOperation | InsertOperation | DeleteOperation;
 
 export const CHANGE_LINE_CHAR = '\n';
 
-class LineOT {
+export class LineOT {
   ops: Operation[] = [];
 
   baseLineCounts: number = 0;
@@ -403,5 +403,3 @@ class LineOT {
     return [operation1prime, operation2prime];
   };
 }
-
-export default LineOT;
