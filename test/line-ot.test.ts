@@ -1,4 +1,4 @@
-import LineOT, { CHANGE_LINE_CHAR } from '../src/line-ot';
+import { LineOT, CHANGE_LINE_CHAR } from '../src/line-ot';
 
 const file = `a
 b
