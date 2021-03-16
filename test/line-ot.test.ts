@@ -8,6 +8,14 @@ const fileLines: string[] = file.split(CHANGE_LINE_CHAR);
 const fileLineCounts = fileLines.length;
 
 describe('constructor', () => {
+  it('tt', () => {
+    const ot1 = new LineOT([1, ['d'], 2]);
+    const ot2 = new LineOT([2, ['f'], 2]);
+    // const [a, b] = LineOT.transform(ot1, ot2);
+    const oo = ot1.compose(ot2);
+    console.log(oo.baseLineCounts, oo.toJSON());
+  });
+
   it('success', () => {
     const ot = new LineOT([fileLineCounts]);
     ot.apply(file);

@@ -1,6 +1,6 @@
 {
-  "name": "@youzan/line-ot",
-  "version": "1.1.0",
+  "name": "line-ot",
+  "version": "1.0.0",
   "description": "",
   "keywords": [],
   "main": "dist/line-ot.umd.js",
@@ -9,10 +9,10 @@
   "files": [
     "dist"
   ],
-  "author": "冯超 <fengchao@youzan.com>",
+  "author": "carefree@163.com",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/FocusCare/line-ot.git"
   },
   "license": "MIT",
   "engines": {
